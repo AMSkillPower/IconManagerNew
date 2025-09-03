@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +24,10 @@ import {
   Clock,
   FileImage,
   Image as ImageIcon,
+  Trash2,
+  Edit3,
+  X,
+  Plus,
 } from "lucide-react";
 
 interface ImageItem {
@@ -46,6 +52,9 @@ export function ImageGrid({ searchTags, refreshTrigger }: ImageGridProps) {
   const [downloadFormat, setDownloadFormat] = useState<string>("png");
   const [downloadSize, setDownloadSize] = useState<string>("100");
   const [quickDownloadFormat, setQuickDownloadFormat] = useState<string>("png");
+  const [editingTags, setEditingTags] = useState(false);
+  const [newTags, setNewTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
 
   const sizes = [
     { value: "8", label: "8x8" },
@@ -115,6 +124,70 @@ export function ImageGrid({ searchTags, refreshTrigger }: ImageGridProps) {
     } catch {
       console.error("Errore durante il download");
     }
+  };
+
+  const handleDeleteImage = async (imageId: string) => {
+    if (!confirm('Sei sicuro di voler eliminare questa immagine?')) return;
+    
+    try {
+      const response = await fetch(`/api/images/${imageId}`, { 
+        method: 'DELETE' 
+      });
+      
+      if (response.ok) {
+        setSelectedImage(null);
+        fetchImages();
+      } else {
+        console.error('Errore durante l\'eliminazione');
+      }
+    } catch (error) {
+      console.error('Errore durante l\'eliminazione:', error);
+    }
+  };
+
+  const handleUpdateTags = async (imageId: string, tags: string[]) => {
+    try {
+      const response = await fetch(`/api/images/${imageId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tags }),
+      });
+      
+      if (response.ok) {
+        setSelectedImage(null);
+        setEditingTags(false);
+        setNewTags([]);
+        setTagInput("");
+        fetchImages();
+      } else {
+        console.error('Errore durante l\'aggiornamento');
+      }
+    } catch (error) {
+      console.error('Errore durante l\'aggiornamento:', error);
+    }
+  };
+
+  const addTag = () => {
+    const tag = tagInput.trim();
+    if (tag && !newTags.includes(tag)) {
+      setNewTags([...newTags, tag]);
+    }
+    setTagInput("");
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setNewTags(newTags.filter(tag => tag !== tagToRemove));
+  };
+
+  const startEditingTags = (image: ImageItem) => {
+    setNewTags([...image.tags]);
+    setEditingTags(true);
+  };
+
+  const cancelEditingTags = () => {
+    setEditingTags(false);
+    setNewTags([]);
+    setTagInput("");
   };
 
   const formatDate = (d: string) =>
@@ -230,6 +303,17 @@ export function ImageGrid({ searchTags, refreshTrigger }: ImageGridProps) {
                       >
                         <Download className="h-4 w-4" />
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="bg-red-500/90 hover:bg-red-600 text-white backdrop-blur-sm rounded-xl h-8 w-8 p-0 shadow-lg"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteImage(img.id);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -314,16 +398,76 @@ export function ImageGrid({ searchTags, refreshTrigger }: ImageGridProps) {
                   <span className="font-medium text-slate-600 mb-2 block">
                     Tags:
                   </span>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedImage.tags.map((t, i) => (
-                      <Badge
-                        key={i}
-                        className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full"
-                      >
-                        {t}
-                      </Badge>
-                    ))}
-                  </div>
+                  {editingTags ? (
+                    <div className="space-y-4">
+                      <div className="flex gap-2">
+                        <Input
+                          value={tagInput}
+                          onChange={(e) => setTagInput(e.target.value)}
+                          placeholder="Aggiungi tag..."
+                          className="flex-1"
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              addTag();
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={addTag}
+                          disabled={!tagInput.trim()}
+                          className="bg-blue-500 hover:bg-blue-600 text-white"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      
+                      <div className="flex flex-wrap gap-2">
+                        {newTags.map((tag, i) => (
+                          <Badge
+                            key={i}
+                            className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full flex items-center gap-1"
+                          >
+                            {tag}
+                            <X
+                              className="h-3 w-3 cursor-pointer hover:text-red-200"
+                              onClick={() => removeTag(tag)}
+                            />
+                          </Badge>
+                        ))}
+                      </div>
+                      
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={cancelEditingTags}
+                        >
+                          Annulla
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleUpdateTags(selectedImage.id, newTags)}
+                          className="bg-green-500 hover:bg-green-600 text-white"
+                        >
+                          Salva
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedImage.tags.map((t, i) => (
+                        <Badge
+                          key={i}
+                          className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full"
+                        >
+                          {t}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -377,46 +521,25 @@ export function ImageGrid({ searchTags, refreshTrigger }: ImageGridProps) {
                 </div>
               </div>
 
-                            {/* Azioni immagine */}
-              <div className="flex gap-3 justify-end">
+              {/* Azioni immagine */}
+              <div className="flex gap-2 justify-end">
                 <Button
                   variant="outline"
-                  onClick={async () => {
-                    if (!selectedImage) return;
-                    if (!confirm('Sei sicuro di voler eliminare questa immagine?')) return;
-                    await fetch(`/api/images/${selectedImage.id}`, { method: 'DELETE' });
-                    setSelectedImage(null);
-                    fetchImages();
-                  }}
+                  size="sm"
+                  onClick={() => handleDeleteImage(selectedImage.id)}
                   className="text-red-600 border-red-300 hover:bg-red-50 rounded-xl"
                 >
+                  <Trash2 className="h-4 w-4 mr-1" />
                   Elimina
                 </Button>
 
                 <Button
-                  onClick={() => {
-                    if (!selectedImage) return;
-                    const newTags = prompt(
-                      'Modifica i tag (separati da virgola):',
-                      selectedImage.tags.join(', ')
-                    );
-                    if (newTags !== null) {
-                      const tags = newTags
-                        .split(',')
-                        .map((t) => t.trim())
-                        .filter(Boolean);
-                      fetch(`/api/images/${selectedImage.id}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ tags }),
-                      }).then(() => {
-                        setSelectedImage(null);
-                        fetchImages();
-                      });
-                    }
-                  }}
-                  className="bg-blue-500 text-white hover:bg-blue-600 rounded-xl"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => startEditingTags(selectedImage)}
+                  className="border-blue-300 text-blue-600 hover:bg-blue-50 rounded-xl"
                 >
+                  <Edit3 className="h-4 w-4 mr-1" />
                   Modifica tag
                 </Button>
               </div>
